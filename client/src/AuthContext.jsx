@@ -1,29 +1,38 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { AuthContext } from './AuthContext';
 import { apiUrl } from './api';
 
 export function AuthProvider({ children }) {
   const [accessToken, setAccessToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const refreshPromise = useRef(null);
 
   const refreshAccessToken = useCallback(async () => {
-    const response = await fetch(apiUrl('/api/auth/refresh-token'), {
-      method: 'POST',
-      credentials: 'include',
-    });
+    if (!refreshPromise.current) {
+      refreshPromise.current = (async () => {
+        const response = await fetch(apiUrl('/api/auth/refresh-token'), {
+          method: 'POST',
+          credentials: 'include',
+        });
 
-    if (!response.ok) {
-      setAccessToken(null);
-      return null;
+        if (!response.ok) {
+          setAccessToken(null);
+          return null;
+        }
+
+        const data = await response.json();
+        if (!data.accessToken) {
+          throw new Error('Refresh response did not include an access token.');
+        }
+
+        setAccessToken(data.accessToken);
+        return data.accessToken;
+      })().finally(() => {
+        refreshPromise.current = null;
+      });
     }
 
-    const data = await response.json();
-    if (!data.accessToken) {
-      throw new Error('Refresh response did not include an access token.');
-    }
-
-    setAccessToken(data.accessToken);
-    return data.accessToken;
+    return refreshPromise.current;
   }, []);
 
   const authenticatedFetch = useCallback(async (url, options = {}) => {

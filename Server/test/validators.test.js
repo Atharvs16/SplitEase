@@ -53,6 +53,17 @@ test("registration trims names and rejects invalid credentials", () => {
     assert.equal(invalid.nextCalled, false);
     assert.equal(invalid.statusCode, 400);
     assert.ok(invalid.body.details.length > 0);
+
+    const oversizedPassword = invoke(validateRegister, {
+        body: {
+            name: "Alex Doe",
+            username: "alex_doe",
+            phone: "9876543210",
+            password: "😀".repeat(19)
+        }
+    });
+    assert.equal(oversizedPassword.statusCode, 400);
+    assert.ok(oversizedPassword.body.details.some(issue => issue.field === "password"));
 });
 
 test("group validation requires a valid name and unique member IDs", () => {

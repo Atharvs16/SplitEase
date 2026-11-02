@@ -1,5 +1,6 @@
 const authService = require("../services/auth.service");
 const userQueries = require('../queries/users.queries');
+const { refreshCookieOptions } = require("../config/refresh-cookie");
 
 async function register(req, res) {
 
@@ -14,11 +15,8 @@ async function register(req, res) {
         });
 
         res.cookie("refreshtoken", result.refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: "none",
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-            path: "/"
+            ...refreshCookieOptions,
+            maxAge: 7 * 24 * 60 * 60 * 1000
         });
 
 
@@ -43,7 +41,9 @@ async function register(req, res) {
 
 async function checkUsername(req, res) {
     try {
-        const username = req.query.username?.trim();
+        const username = typeof req.query.username === "string"
+            ? req.query.username.trim()
+            : "";
 
         if (!username || username.length < 3) {
             return res.status(400).json({
@@ -85,11 +85,8 @@ async function login(req, res) {
         }
 
         res.cookie("refreshtoken", result.refreshToken, {
-            httpOnly: true,
-            secure: true,
-            sameSite: "none",
-            maxAge: 7 * 24 * 60 * 60 * 1000,
-            path: "/"
+            ...refreshCookieOptions,
+            maxAge: 7 * 24 * 60 * 60 * 1000
         });
 
         return res.status(result.statusCode).json({
@@ -142,6 +139,10 @@ async function refreshToken(req, res) {
     try {
         const result = await authService.refreshToken(refreshToken);
 
+        res.cookie("refreshtoken", result.refreshToken, {
+            ...refreshCookieOptions,
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
         res.status(200).json({
             user: {
                 name: result.user.name,
@@ -152,19 +153,15 @@ async function refreshToken(req, res) {
         });
     }
     catch (error) {
+        if (["TokenExpiredError", "JsonWebTokenError", "UnauthorizedError"].includes(error.name)) {
+            return res.status(401).json({
+                error: error.name === "TokenExpiredError"
+                    ? "Refresh token expired"
+                    : "Invalid refresh token"
+            });
+        }
+
         console.error(error);
-        if (error.name === "TokenExpiredError") {
-            return res.status(401).json({
-                error: "Refresh token expired"
-            });
-        }
-
-        if (error.name === "JsonWebTokenError") {
-            return res.status(401).json({
-                error: "Invalid refresh token"
-            });
-        }
-
         return res.status(500).json({
             error: error.message || "Database error"
         });
@@ -179,12 +176,7 @@ async function logout(req, res) {
 
     try {
         await authService.logout(refreshToken);
-        res.clearCookie('refreshtoken', {
-            httpOnly: true,
-            secure: true,
-            sameSite: "none",
-            path: "/"
-        });
+        res.clearCookie('refreshtoken', refreshCookieOptions);
         res.status(200).json({ message: "Logged out successfully" });
     }
     catch (error) {

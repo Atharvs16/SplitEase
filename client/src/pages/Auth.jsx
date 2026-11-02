@@ -26,6 +26,10 @@ function getPasswordChecks(password) {
       label: "Contains a number",
       valid: /\d/.test(password),
     },
+    {
+      label: "At most 72 UTF-8 bytes",
+      valid: new TextEncoder().encode(password).length <= 72,
+    },
   ];
 }
 
@@ -551,6 +555,7 @@ function Auth() {
                       type={showPassword ? "text" : "password"}
                       autoComplete="new-password"
                       placeholder="Create a strong password"
+                      maxLength={72}
                       value={signup.password}
                       onChange={updateSignup}
                     />

@@ -41,7 +41,9 @@ Server/                 Express API
   db/                    Database schema snapshot
 ```
 
-The client uses `VITE_API_URL` as its API base URL. Authentication uses short-lived access tokens and an HTTP-only refresh-token cookie; cross-origin deployments require credentialed requests and an API CORS origin matching the deployed client URL.
+In production, the client sends API calls to its own Vercel origin; [`client/vercel.json`](client/vercel.json) rewrites `/api/*` to the Render API. This keeps the HTTP-only refresh-token cookie first-party. Local Vite development uses `VITE_API_URL` to proxy API requests to the configured backend. Authentication uses short-lived access tokens and rotating refresh-token cookies.
+
+The API allows the production client and local Vite origins by default. Add any additional browser origins, such as a Vercel preview deployment, to Render's `CORS_ORIGINS` environment variable as a comma-separated list. Set `NODE_ENV=production` on Render so refresh cookies are marked `Secure`.
 
 ## Run locally
 
@@ -66,6 +68,7 @@ DB_HOST=localhost
 DB_PORT=5432
 JWT_SECRET=replace_with_a_long_random_secret
 PORT=3000
+NODE_ENV=development
 ```
 
 Keep actual credentials and secrets out of source control.
@@ -80,7 +83,7 @@ The API starts on port `3000` unless `PORT` is set.
 
 ### 3. Configure and start the client
 
-Set `VITE_API_URL` to the API URL in `client/.env.local` (for example, `http://localhost:3000`) or configure it in the frontend build environment.
+Set `VITE_API_URL` to the API URL in `client/.env.local` (for example, `http://localhost:3000`). Vite proxies local `/api` requests to that target.
 
 ```powershell
 Set-Location client
@@ -88,7 +91,7 @@ npm install
 npm run dev
 ```
 
-For production builds, configure `VITE_API_URL` in the deployment environment. The local `client/.env.production` file is gitignored and is not included in deployments.
+The production API destination is configured in `client/vercel.json`; no API URL build variable is required on Vercel.
 
 ## Quality checks
 

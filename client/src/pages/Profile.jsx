@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../useAuth";
 import "./Profile.css";
 
@@ -21,6 +21,7 @@ async function readResponse(response) {
 export default function Profile() {
     const { username = "" } = useParams();
     const navigate = useNavigate();
+    const location = useLocation();
     const { authenticatedFetch, logout } = useAuth();
     const [profile, setProfile] = useState(null);
     const [balances, setBalances] = useState(null);
@@ -63,6 +64,12 @@ export default function Profile() {
         return () => window.clearTimeout(timer);
     }, [loadProfile]);
 
+    useEffect(() => {
+        if (!loading && profile?.is_self && location.hash === "#settings") {
+            document.getElementById("profile-settings")?.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [loading, location.hash, profile?.is_self]);
+
     async function updateProfile(event) {
         event.preventDefault();
         setWorking(true);
@@ -85,6 +92,10 @@ export default function Profile() {
 
     async function updatePassword(event) {
         event.preventDefault();
+        if (new TextEncoder().encode(newPassword).length > 72) {
+            setError("New password must be at most 72 UTF-8 bytes.");
+            return;
+        }
         if (newPassword !== confirmPassword) {
             setError("The new passwords do not match.");
             return;
@@ -239,7 +250,7 @@ export default function Profile() {
                         )}
 
                         {profile.is_self ? (
-                            <div className="profile-settings-grid">
+                            <div className="profile-settings-grid" id="profile-settings">
                                 <section className="profile-card">
                                     <div className="profile-section-heading">
                                         <h2>Personal details</h2>
@@ -272,11 +283,11 @@ export default function Profile() {
                                         </label>
                                         <label>
                                             New password
-                                            <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} maxLength={100} required />
+                                            <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} maxLength={72} required />
                                         </label>
                                         <label>
                                             Confirm new password
-                                            <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} maxLength={100} required />
+                                            <input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} maxLength={72} required />
                                         </label>
                                         <button type="submit" className="profile-primary-button" disabled={working}>
                                             Update password

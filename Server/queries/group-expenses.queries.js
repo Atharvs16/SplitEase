@@ -460,5 +460,7 @@ module.exports = {
     requestExpenseSettlement,
     listGroupSettlementRequests,
     acceptGroupSettlementRequest,
-    cancelGroupSettlementRequest
+    cancelGroupSettlementRequest,
+    makeEqualSplits,
+    distributePercentage
 };

@@ -1,4 +1,5 @@
 const bcrypt = require('bcrypt');
+const crypto = require("crypto");
 const jwt = require('jsonwebtoken');
 
 const userQueries = require('../queries/users.queries');
@@ -6,6 +7,20 @@ const sessionQueries = require('../queries/sessions.queries');
 const db = require('../config/db');
 
 const config = require('../config/config');
+
+function hashRefreshToken(token) {
+    return `sha256:${crypto.createHash("sha256").update(token).digest("hex")}`;
+}
+
+async function matchesRefreshToken(token, storedHash) {
+    if (storedHash?.startsWith("sha256:")) {
+        const expected = Buffer.from(storedHash.slice("sha256:".length), "hex");
+        const actual = Buffer.from(hashRefreshToken(token).slice("sha256:".length), "hex");
+        return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
+    }
+
+    return storedHash ? bcrypt.compare(token, storedHash) : false;
+}
 
 async function register({ name, phone, username, password, ip, userAgent }) {
     const passwordHash = await bcrypt.hash(password, 10);
@@ -31,7 +46,8 @@ async function register({ name, phone, username, password, ip, userAgent }) {
         const refreshToken = jwt.sign(
             {
                 userId: user.id,
-                sessionId: session.id
+                sessionId: session.id,
+                jti: crypto.randomUUID()
             },
             config.JWT_SECRET,
             {
@@ -39,7 +55,7 @@ async function register({ name, phone, username, password, ip, userAgent }) {
             }
         );
     
-        const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+        const refreshTokenHash = hashRefreshToken(refreshToken);
 
         await sessionQueries.updateSessionRefreshToken(
             session.id,
@@ -164,7 +180,8 @@ async function login({ username, phone, password, ip, userAgent }) {
         const refreshToken = jwt.sign(
             {
                 userId: user.id,
-                sessionId: session.id
+                sessionId: session.id,
+                jti: crypto.randomUUID()
             },
             config.JWT_SECRET,
             {
@@ -172,7 +189,7 @@ async function login({ username, phone, password, ip, userAgent }) {
             }
         );
     
-        const refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+        const refreshTokenHash = hashRefreshToken(refreshToken);
 
         await sessionQueries.updateSessionRefreshToken(
             session.id,
@@ -230,7 +247,9 @@ async function getme(accessToken) {
         return user;
     }
     catch (error) {
-        console.error(error);
+        if (!["TokenExpiredError", "JsonWebTokenError", "UnauthorizedError"].includes(error.name)) {
+            console.error(error);
+        }
         throw error;
     }
 }
@@ -244,17 +263,50 @@ async function refreshToken(refreshToken) {
 
         const sessionResult = await sessionQueries.getSessionById(decoded.sessionId, decoded.userId);
         if (sessionResult === undefined || sessionResult === null) {
-            throw new Error("Session not found");
+            const error = new Error("Session not found.");
+            error.name = "UnauthorizedError";
+            throw error;
         }
 
         const session = sessionResult;
         if(session.revoked) {
-            throw new Error("Session is revoked");
+            const error = new Error("Session is revoked.");
+            error.name = "UnauthorizedError";
+            throw error;
         }
 
-        const isValidRefreshToken = await bcrypt.compare(refreshToken, session.refresh_token_hash);
+        const isValidRefreshToken = await matchesRefreshToken(
+            refreshToken,
+            session.refresh_token_hash
+        );
         if (!isValidRefreshToken) {
-            throw new Error("Invalid refresh token");
+            const error = new Error("Invalid refresh token.");
+            error.name = "UnauthorizedError";
+            throw error;
+        }
+
+        const user = await userQueries.getUserById(decoded.userId);
+        if (!user) {
+            const error = new Error("User no longer exists.");
+            error.name = "UnauthorizedError";
+            throw error;
+        }
+
+        const nextRefreshToken = jwt.sign({
+            userId: decoded.userId,
+            sessionId: session.id,
+            jti: crypto.randomUUID()
+        }, config.JWT_SECRET, { expiresIn: "7d" });
+        const nextRefreshTokenHash = hashRefreshToken(nextRefreshToken);
+        const rotated = await sessionQueries.rotateSessionRefreshToken(
+            session.id,
+            session.refresh_token_hash,
+            nextRefreshTokenHash
+        );
+        if (!rotated) {
+            const error = new Error("Refresh token has already been used.");
+            error.name = "UnauthorizedError";
+            throw error;
         }
         
         const newAccessToken = jwt.sign({
@@ -262,8 +314,6 @@ async function refreshToken(refreshToken) {
             sessionId: session.id
         }, config.JWT_SECRET, { expiresIn: '15m' });
         
-        const user = await userQueries.getUserById(decoded.userId);
-
         return {
             user: {
                 name: user.name,
@@ -271,10 +321,13 @@ async function refreshToken(refreshToken) {
                 phone: user.phone
             },
             accessToken: newAccessToken,
+            refreshToken: nextRefreshToken
         };
     }
     catch (error) {
-        console.error(error);
+        if (!["TokenExpiredError", "JsonWebTokenError", "UnauthorizedError"].includes(error.name)) {
+            console.error(error);
+        }
         throw error;
     }
 }

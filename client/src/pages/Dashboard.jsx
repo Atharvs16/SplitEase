@@ -950,12 +950,10 @@ export default function Dashboard() {
                                             closeMenu();
                                             if (item.label === "My Profile" && data?.user?.username) {
                                                 navigate(`/${encodeURIComponent(data.user.username)}`);
-                                            } 
-                                            else if(item.label === "Help & Support"){
+                                            } else if (item.label === "Account Settings" && data?.user?.username) {
+                                                navigate(`/${encodeURIComponent(data.user.username)}#settings`);
+                                            } else if (item.label === "Help & Support") {
                                                 navigate("/Help");
-                                            }
-                                            else {
-                                                setNotice(`${item.label} is not available yet.`);
                                             }
                                         }}
                                     >

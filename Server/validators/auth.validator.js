@@ -26,7 +26,11 @@ const registerSchema = z.object({
     password: z
         .string()
         .min(8, "Password must be at least 8 characters")
-        .max(100, "Password must be at most 100 characters")
+        .max(72, "Password must be at most 72 characters")
+        .refine(
+            password => Buffer.byteLength(password, "utf8") <= 72,
+            "Password must be at most 72 UTF-8 bytes"
+        )
 });
 
 function validateRegister(req, res, next) {

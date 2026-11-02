@@ -7,7 +7,7 @@ npm install
 npm run dev
 ```
 
-API requests use `VITE_API_URL` from `.env.production`; the Vite development proxy uses that same setting. Because `.env.production` is gitignored, configure this variable in your frontend hosting provider's build environment too. Cross-origin login and signup include credentials, so the API must allow the exact client origin with credentials.
+In production, API requests use the same-origin `/api` path and Vercel rewrites them to the Render API, keeping refresh cookies first-party. The production API destination is configured in `vercel.json`. During local development, set `VITE_API_URL` in `.env.local` (for example, `http://localhost:3000`) to configure Vite's API proxy.
 
 Run the client checks with:
 

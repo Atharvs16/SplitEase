@@ -103,7 +103,10 @@ export default function Notifications({ onClose }) {
         friend_requests: friendRequests.requests,
         friend_splits: friendSplits.requests,
         group_splits: groupSplits.requests,
-        other: activity.activities.filter((item) => item.activity_type === "expense"),
+        other: activity.activities.filter((item) =>
+          item.activity_type === "expense" ||
+          (item.activity_type === "settlement" && item.status === "accepted")
+        ),
       });
     } catch (fetchError) {
       setError(fetchError.message || "Failed to load notifications.");
@@ -216,10 +219,14 @@ export default function Notifications({ onClose }) {
       };
     }
 
+    const message = notification.activity_type === "settlement"
+      ? `${notification.actor_is_current_user ? "You recorded" : `${notification.actor_name || "A friend"} recorded`} a ${formatMoney(notification.amount)} settlement for ${notification.title} · ${notification.context}`
+      : `${notification.title} · ${formatMoney(notification.amount)} · ${notification.context}`;
+
     return {
       id: notification.id,
       name: notification.actor_name || "Expense activity",
-      message: `${notification.title} · ${formatMoney(notification.amount)} · ${notification.context}`,
+      message,
       createdAt: notification.created_at,
     };
   }

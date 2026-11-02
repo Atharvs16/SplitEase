@@ -1,0 +1,97 @@
+.help-page {
+  min-height: 100vh;
+  background: #f7f9f7;
+  color: #202c27;
+  font-family: "DM Sans", sans-serif;
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px clamp(20px, 6vw, 88px);
+  border-bottom: 1px solid #e9eeea;
+  background: #fff;
+}
+
+.help-brand {
+  color: #1c3328;
+  font: 800 22px "Manrope", sans-serif;
+  text-decoration: none;
+}
+
+.help-brand span {
+  color: #16865c;
+}
+
+.help-back {
+  color: #116d4a;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.help-content {
+  width: min(760px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 64px 0;
+}
+
+.help-eyebrow {
+  margin: 0 0 10px;
+  color: #16865c;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.help-content h1 {
+  margin: 0;
+  font: 800 clamp(30px, 6vw, 42px) "Manrope", sans-serif;
+}
+
+.help-intro {
+  margin: 12px 0 30px;
+  color: #68766d;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.help-topics {
+  display: grid;
+  gap: 12px;
+}
+
+.help-topic {
+  padding: 20px;
+  border: 1px solid #e9eeea;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.help-topic h2 {
+  margin: 0 0 7px;
+  font: 700 16px "Manrope", sans-serif;
+}
+
+.help-topic p,
+.help-note {
+  margin: 0;
+  color: #68766d;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.help-note {
+  margin-top: 24px;
+}
+
+@media (max-width: 480px) {
+  .help-header {
+    padding: 15px 16px;
+  }
+
+  .help-content {
+    padding: 42px 0;
+  }
+}

@@ -1,4 +1,5 @@
 const usersService = require("../services/users.service");
+const { refreshCookieOptions } = require("../config/refresh-cookie");
 
 function accessToken(req) {
     return req.headers.authorization?.startsWith("Bearer ")
@@ -32,7 +33,10 @@ async function updateProfile(req, res) {
         typeof phone !== "string" ||
         !/^[6-9]\d{9}$/.test(phone.trim()) ||
         (newPassword !== undefined &&
-            (typeof newPassword !== "string" || newPassword.length < 8 || newPassword.length > 100)) ||
+            (typeof newPassword !== "string" ||
+                newPassword.length < 8 ||
+                newPassword.length > 72 ||
+                Buffer.byteLength(newPassword, "utf8") > 72)) ||
         (currentPassword !== undefined && typeof currentPassword !== "string")
     ) {
         return res.status(400).json({ error: "Enter a valid name, Indian phone number, and password." });
@@ -58,12 +62,7 @@ async function deleteAccount(req, res) {
 
     try {
         await usersService.deleteAccount(accessToken(req), req.body.currentPassword);
-        res.clearCookie("refreshtoken", {
-            httpOnly: true,
-            secure: true,
-            sameSite: "none",
-            path: "/"
-        });
+        res.clearCookie("refreshtoken", refreshCookieOptions);
         return res.status(200).json({ message: "Account deleted. Shared financial history has been preserved." });
     } catch (error) {
         return respondWithError(res, error, "Unable to delete account.");

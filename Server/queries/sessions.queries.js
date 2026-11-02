@@ -55,6 +55,19 @@ async function updateSessionRefreshToken(sessionId, newRefreshTokenHash, queryab
     }
 }
 
+async function rotateSessionRefreshToken(sessionId, currentRefreshTokenHash, nextRefreshTokenHash) {
+    const result = await db.query(
+        `UPDATE sessions
+         SET refresh_token_hash = $3, updated_at = NOW()
+         WHERE id = $1
+           AND refresh_token_hash = $2
+           AND revoked = FALSE
+         RETURNING id`,
+        [sessionId, currentRefreshTokenHash, nextRefreshTokenHash]
+    );
+    return result.rowCount === 1;
+}
+
 async function revokeSession(sessionId) {
     try{
         const query = `
@@ -80,5 +93,6 @@ module.exports = {
     createSession,
     getSessionById,
     updateSessionRefreshToken,
+    rotateSessionRefreshToken,
     revokeSession
 };
