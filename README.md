@@ -1,66 +1,119 @@
 # SplitEase
 
-> **Live application:** [splits-ease.vercel.app](https://splits-ease.vercel.app/)
+A full-stack expense-splitting app (a Splitwise-style tracker) for friends and groups. Add shared expenses, split them equally, by exact amount or by percentage, and settle up with a request-and-accept flow.
 
-SplitEase is a full-stack expense-sharing application for keeping track of shared spending with friends and groups. Create expenses, see who owes whom, and record or request settlements from one dashboard.
+**Live demo:** https://splits-ease.vercel.app/
 
-## What you can do
+> The backend may be hosted on a free tier, so the first request after a period of inactivity can take a few seconds while the server wakes up.
 
-- Create an account and sign in with a username or phone number.
-- Add friends and manage friend requests.
-- Create groups, invite members, and share group expenses.
-- Add expenses with participant splits and track balances.
-- Request, accept, and record settlements.
-- Review recent activity and update your profile.
-- Use the responsive dashboard on desktop and mobile.
+<!--
+Add screenshots, then uncomment this block:
 
-## Technology
+| Dashboard | Group expenses | Settlements |
+|-----------|----------------|-------------|
+| ![Dashboard](docs/screenshots/dashboard.png) | ![Group](docs/screenshots/group.png) | ![Settlements](docs/screenshots/settlements.png) |
+-->
 
-| Area | Technologies |
-| --- | --- |
-| Frontend | React, Vite, React Router |
-| Backend | Node.js, Express |
-| Database | PostgreSQL |
-| Validation and authentication | Zod, JWT, bcrypt, HTTP-only refresh-token cookies |
-| Deployment | Vercel (client), Render (API) |
+## Features
 
-## Architecture
+- **Accounts:** sign up and sign in with a username or a phone number.
+- **Friends:** search for users, send friend requests, accept or reject them.
+- **Groups:** create groups and invite members by user or by phone number.
+- **Expenses:** add expenses to a group or between friends, with three split types:
+  - equal
+  - exact amounts
+  - percentages
+- **Balances:** see what you owe and what you are owed, per group and per friend.
+- **Settlements:** record a payment, or request one that the other person accepts. A pending request can be cancelled by the person who sent it.
+- **Activity and notifications:** a feed of recent activity.
+- **Profile:** view and update your profile, or delete your account.
+- **Responsive UI:** works on desktop and mobile.
 
-```text
-client/                 React single-page application
-  src/
-    components/         Shared UI components
-    pages/              Landing, authentication, dashboard, and profile pages
-    api.js              Shared API URL helper
+## Tech stack
 
-Server/                 Express API
-  controllers/          HTTP request handlers
-  services/             Application and authentication logic
-  queries/               PostgreSQL queries
-  validators/            Request validation
-  db/                    Database schema snapshot
+| Layer | Technology |
+|-------|------------|
+| Client | React, Vite |
+| Server | Node.js, Express 5 |
+| Database | PostgreSQL (`pg`) |
+| Auth | JWT access and refresh tokens, bcrypt, httpOnly cookies |
+| Validation | zod |
+| Security | express-rate-limit, CORS allowlist |
+| Tests | Node's built-in test runner (`node --test`) |
+| Hosting | Vercel (client), Render (API) |
+
+## Design decisions
+
+**Money is stored as integers.** Amounts are `bigint` values in the smallest currency unit (paise), never floats. For equal and percentage splits, the leftover paise are distributed so the shares always add up to exactly the expense total, and the server rejects any split that doesn't match.
+
+**Settlements are transactional.** Creating and accepting settlements runs inside a database transaction, and the expense row is locked with `SELECT ... FOR UPDATE`. This prevents two simultaneous requests from settling more than the remaining amount owed.
+
+**Authentication follows token-rotation practice.**
+- Access tokens last 15 minutes; refresh tokens last 7 days and are sent as httpOnly cookies.
+- Refresh tokens are stored hashed (SHA-256) in a `sessions` table and rotated on every use, so a reused token is rejected.
+- Sessions can be revoked on logout.
+- Passwords are hashed with bcrypt.
+- Login, signup and username-check endpoints are rate limited.
+
+**Requests are validated at the edge.** Every write endpoint validates its body and URL parameters with zod before touching the database, and the schema adds `CHECK` constraints and unique indexes as a second line of defence.
+
+**One origin for the browser.** In production the Vercel client proxies `/api/*` to the backend with a rewrite, so cookies stay same-origin.
+
+## Project structure
+
+```
+SplitEase/
+├── client/                  # React + Vite frontend
+│   └── src/
+│       ├── pages/           # Landing, Auth, Dashboard, GroupChat, FriendChat, Profile, ...
+│       └── components/
+└── Server/                  # Express API
+    ├── config/              # env loading, DB pool, cookie options
+    ├── routes/              # route definitions
+    ├── controllers/         # HTTP layer
+    ├── services/            # business logic (auth, groups, friends, ...)
+    ├── queries/             # SQL
+    ├── validators/          # zod schemas
+    ├── middleware/          # rate limiting
+    ├── db/                  # Splitwise Schema.sql
+    └── test/
 ```
 
-In production, the client sends API calls to its own Vercel origin; [`client/vercel.json`](client/vercel.json) rewrites `/api/*` to the Render API. This keeps the HTTP-only refresh-token cookie first-party. Local Vite development uses `VITE_API_URL` to proxy API requests to the configured backend. Authentication uses short-lived access tokens and rotating refresh-token cookies.
+## API overview
 
-The API allows the production client and local Vite origins by default. Add any additional browser origins, such as a Vercel preview deployment, to Render's `CORS_ORIGINS` environment variable as a comma-separated list. Set `NODE_ENV=production` on Render so refresh cookies are marked `Secure`.
+All routes are under `/api`.
 
-## Run locally
+| Prefix | Purpose |
+|--------|---------|
+| `/api/auth` | `signup`, `login`, `getme`, `refresh-token`, `logout`, `check-username` |
+| `/api/friends` | search and add friends, friend requests, friend expenses, settlements and settlement requests |
+| `/api/groups` | create groups, invitations, group expenses, settlements and settlement requests |
+| `/api/activity` | recent activity feed |
+| `/api/users` | view a profile (`/:username`), update or delete your account (`/me`) |
+
+## Getting started
 
 ### Prerequisites
 
 - Node.js and npm
 - PostgreSQL
 
-### 1. Create a database
+### 1. Set up the database
 
-Create an empty PostgreSQL database, then apply [`Server/db/Splitwise Schema.sql`](Server/db/Splitwise%20Schema.sql). This file is a **fresh-database schema snapshot**, not an upgrade migration. Do not apply it to an existing database; use data-preserving migrations for upgrades.
+Create an empty database and apply the schema:
+
+```bash
+createdb splitease
+psql -d splitease -f "Server/db/Splitwise Schema.sql"
+```
+
+The SQL file is a fresh-database snapshot, not a migration. Apply it only to a new, empty database; do not rerun it against one that already has data.
 
 ### 2. Configure and start the API
 
 Create `Server/.env`:
 
-```dotenv
+```
 DB_USER=your_database_user
 DB_PASSWORD=your_database_password
 DB_NAME=splitease
@@ -68,44 +121,82 @@ DB_HOST=localhost
 DB_PORT=5432
 JWT_SECRET=replace_with_a_long_random_secret
 PORT=3000
-NODE_ENV=development
+
+# Optional: extra allowed origins, comma separated
+# CORS_ORIGINS=https://your-frontend.example.com
 ```
 
-Keep actual credentials and secrets out of source control.
+Keep real credentials in the git-ignored `.env`; never commit them. Then:
 
-```powershell
-Set-Location Server
+```bash
+cd Server
 npm install
 npm start
 ```
 
-The API starts on port `3000` unless `PORT` is set.
+The API starts on `http://localhost:3000`.
 
-### 3. Configure and start the client
+### 3. Run the client
 
-Set `VITE_API_URL` to the API URL in `client/.env.local` (for example, `http://localhost:3000`). Vite proxies local `/api` requests to that target.
+In a second terminal:
 
-```powershell
-Set-Location client
+```bash
+cd client
 npm install
 npm run dev
 ```
 
-The production API destination is configured in `client/vercel.json`; no API URL build variable is required on Vercel.
+Open `http://localhost:5173`. The Vite dev server proxies `/api` to the URL in `VITE_API_URL`, so set it before starting, for example in `client/.env.local`:
 
-## Quality checks
+```
+VITE_API_URL=http://localhost:3000
+```
 
-Run these from their respective directories:
+### Deploying
 
-```powershell
-# client/
-npm run lint
-npm run build
+- **Client (Vercel):** `client/vercel.json` rewrites `/api/*` to the deployed API and everything else to `index.html`. Update the rewrite destination to your own API URL.
+- **API (Render or similar):** set the same environment variables as above, set `NODE_ENV=production` so cookies are marked `secure`, and add your frontend origin to `CORS_ORIGINS`.
 
-# Server/
+## Testing
+
+```bash
+cd Server
 npm test
 ```
 
-## Project scope
+The suite uses Node's built-in test runner and covers:
 
-The current authentication flow supports username/phone and password sign-in. OTP sign-in and password recovery are not currently implemented.
+- request validation (registration, groups, expense participants, malformed IDs)
+- equal and percentage splits summing exactly to the total
+- settlement rules (only pending requests, never beyond the remaining share, only the sender can cancel)
+- refresh-token reuse being rejected
+- the login rate limit
+
+These tests run without a live database. The config loader still needs the environment variables above to be set (a `Server/.env` file is enough).
+
+Client checks:
+
+```bash
+cd client
+npm run lint
+npm run build
+```
+
+## Known limitations and roadmap
+
+- OTP sign-in and password recovery are not implemented.
+- The person adding an expense is always recorded as its payer.
+- Balances are tracked per expense; there is no "simplify debts" view yet.
+- Tests do not yet run against a real database or exercise concurrent requests.
+
+Planned next:
+
+- [ ] Debt simplification (net balances with the minimum number of payments)
+- [ ] Integration tests against a real PostgreSQL instance, including concurrent settlements
+- [ ] Choose any group member as the payer of an expense
+- [ ] Split the largest frontend components into smaller ones
+
+## Author
+
+**Atharv Satpute**
+[LinkedIn](https://www.linkedin.com/in/atharv-s16/) | [GitHub](https://github.com/Atharvs16) | satputeatharv2005@gmail.com
